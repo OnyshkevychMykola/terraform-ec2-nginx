@@ -134,12 +134,46 @@ resource "aws_security_group" "alb_sg" {
   }
 }
 
-# --- Auto Scaling Group & ALB ---
+resource "aws_instance" "web" {
+  ami                    = "ami-0ecb62995f68bb549"
+  instance_type          = "t3.micro"
+  key_name               = "aws-key"
+  subnet_id              = aws_subnet.public.id
+  vpc_security_group_ids = [aws_security_group.nginx_sg.id]
 
-# Launch template for ASG (base AMI + user_data installs nginx and sets index.html)
+  user_data = <<-EOF
+              #!/bin/bash
+              apt update -y
+              apt install -y nginx
+              systemctl enable nginx
+              systemctl start nginx
+              INSTANCE_IP=$(curl -s http://169.254.169.254/latest/meta-data/local-ipv4)
+              INSTANCE_DNS=$(curl -s http://169.254.169.254/latest/meta-data/local-hostname)
+              echo "<h1>Hello from Terraform</h1><p>Instance IP: $INSTANCE_IP</p><p>Hostname: $INSTANCE_DNS</p>" > /var/www/html/index.html
+              EOF
+
+  tags = {
+    Name = "terraform-nginx"
+  }
+}
+
+# --- Auto Scaling Group & ELB (new functionality) ---# AMI created from the configured EC2 instance (source for ASG)
+resource "aws_ami_from_instance" "web_ami" {
+  name               = "terraform-nginx-ami-${formatdate("YYYY-MM-DD-hhmm", timestamp())}"
+  source_instance_id = aws_instance.web.id
+
+  depends_on = [aws_instance.web]
+
+  lifecycle {
+    create_before_destroy = true
+    ignore_changes         = [name]
+  }
+}
+
+# Launch template for ASG (uses AMI; user_data sets instance IP on each boot)
 resource "aws_launch_template" "asg_lt" {
   name_prefix   = "terraform-asg-"
-  image_id      = "ami-0ecb62995f68bb549"
+  image_id      = aws_ami_from_instance.web_ami.id
   instance_type = var.instance_type
   key_name      = "aws-key"
 
@@ -150,13 +184,10 @@ resource "aws_launch_template" "asg_lt" {
 
   user_data = base64encode(<<-EOF
     #!/bin/bash
-    apt update -y
-    apt install -y nginx
-    systemctl enable nginx
     INSTANCE_IP=$(curl -s http://169.254.169.254/latest/meta-data/local-ipv4)
     INSTANCE_DNS=$(curl -s http://169.254.169.254/latest/meta-data/local-hostname)
     echo "<h1>Hello from ASG</h1><p>Instance IP: $$INSTANCE_IP</p><p>Hostname: $$INSTANCE_DNS</p>" > /var/www/html/index.html
-    systemctl start nginx
+    systemctl start nginx 2>/dev/null || true
   EOF
   )
 
