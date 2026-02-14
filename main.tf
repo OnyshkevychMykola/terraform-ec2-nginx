@@ -188,7 +188,7 @@ resource "aws_launch_template" "asg_lt" {
     #!/bin/bash
     INSTANCE_IP=$(curl -s http://169.254.169.254/latest/meta-data/local-ipv4)
     INSTANCE_DNS=$(curl -s http://169.254.169.254/latest/meta-data/local-hostname)
-    echo "<h1>Hello from ASG</h1><p>Instance IP: $INSTANCE_IP</p><p>Hostname: $INSTANCE_DNS</p>" > /var/www/html/index.html
+    echo "<h1>Hello from ASG</h1><p>Instance IP: $$INSTANCE_IP</p><p>Hostname: $$INSTANCE_DNS</p>" > /var/www/html/index.html
     systemctl start nginx 2>/dev/null || true
   EOF
   )
@@ -292,9 +292,6 @@ resource "aws_autoscaling_policy" "cpu" {
     predefined_metric_specification {
       predefined_metric_type = "ASGAverageCPUUtilization"
     }
-    target_value       = 70.0
-    scale_in_cooldown  = 300
-    scale_out_cooldown = 300
+    target_value = 70.0
   }
 }
-
