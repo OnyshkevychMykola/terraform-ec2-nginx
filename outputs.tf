@@ -1,8 +1,3 @@
-output "server_public_ip" {
-  description = "Public IP of EC2 instance"
-  value       = aws_instance.web.public_ip
-}
-
 # ALB & ASG
 output "alb_dns_name" {
   description = "DNS name of the Application Load Balancer (use for testing traffic distribution)"
